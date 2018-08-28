@@ -196,6 +196,7 @@ namespace Midori {
                     action.activate.connect (() => {
                         var browser = new Browser ((App)Application.get_default ());
                         browser.add (new Tab (null, browser.web_context, hit.link_uri));
+                        browser.show ();
                     });
                     menu.append (new WebKit.ContextMenuItem.from_gaction (action, _("Open Link in New _Window"), hit.link_uri));
                 }
@@ -203,6 +204,7 @@ namespace Midori {
                 action.activate.connect (() => {
                     var browser = new Browser.incognito ((App)Application.get_default ());
                     browser.add (new Tab (null, browser.web_context, hit.link_uri));
+                    browser.show ();
                 });
                 menu.append (new WebKit.ContextMenuItem.from_gaction (action, _("Open Link in New _Private Window"), hit.link_uri));
                 menu.append (new WebKit.ContextMenuItem.separator ());
