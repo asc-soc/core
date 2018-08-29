@@ -13,7 +13,7 @@ namespace Midori {
     [GtkTemplate (ui = "/ui/browser.ui")]
     public class Browser : Gtk.ApplicationWindow {
         public WebKit.WebContext web_context { get; construct set; }
-        public bool is_loading { get { return tab != null && tab.is_loading; } }
+        public bool is_loading { get; protected set; }
         public Tab? tab { get; protected set; }
         public ListStore trash { get; protected set; }
 
@@ -150,44 +150,7 @@ namespace Midori {
                     tab.load_uri (urlbar.uri);
                 }
             });
-            tabs.notify["visible-child"].connect (() => {
-                if (bindings != null) {
-                    foreach (var binding in bindings) {
-                        binding.unbind ();
-                    }
-                }
-                tab = (Tab)tabs.visible_child;
-                if (tab != null) {
-                    go_back.sensitive = tab.can_go_back;
-                    go_forward.sensitive = tab.can_go_forward;
-                    reload.visible = !tab.is_loading;
-                    stop_loading.visible = tab.is_loading;
-                    urlbar.progress_fraction = tab.progress;
-                    title = tab.display_title;
-                    urlbar.secure = tab.secure;
-                    statusbar.label = tab.link_uri;
-                    urlbar.uri = tab.display_uri;
-                    navigationbar.visible = !tab.pinned;
-                    bindings.append (tab.bind_property ("can-go-back", go_back, "sensitive"));
-                    bindings.append (tab.bind_property ("can-go-forward", go_forward, "sensitive"));
-                    bindings.append (tab.bind_property ("is-loading", reload, "visible", BindingFlags.INVERT_BOOLEAN));
-                    bindings.append (tab.bind_property ("is-loading", stop_loading, "visible"));
-                    bindings.append (tab.bind_property ("progress", urlbar, "progress-fraction"));
-                    bindings.append (tab.bind_property ("display-title", this, "title"));
-                    bindings.append (tab.bind_property ("secure", urlbar, "secure"));
-                    bindings.append (tab.bind_property ("link-uri", statusbar, "label"));
-                    bindings.append (tab.bind_property ("display-uri", urlbar, "uri"));
-                    bindings.append (tab.bind_property ("pinned", navigationbar, "visible", BindingFlags.INVERT_BOOLEAN));
-                    tab.grab_focus ();
-                } else {
-                    var previous_tab = tabs.get_children ().nth_data (0);
-                    if (previous_tab == null)
-                        close ();
-                    else
-                        tab = (Tab)previous_tab;
-                }
-            });
-
+            tabs.notify["visible-child"].connect (update_visible_tab);
             search_entry.activate.connect (find_text);
             search_entry.search_changed.connect (find_text);
             search_entry.next_match.connect (find_text);
@@ -222,6 +185,61 @@ namespace Midori {
             // Reveal panel toggle after panels are added
             panel.add.connect ((widget) => { panel_toggle.show (); });
             Plugins.get_default ().plug (panel);
+        }
+
+        Cancellable? update_visible_tab_cancellable = null;
+        void update_visible_tab () {
+            if (update_visible_tab_cancellable != null) {
+                update_visible_tab_cancellable.cancel ();
+            }
+            update_visible_tab_cancellable = new Cancellable ();
+            Timeout.add (500, () => {
+                update_visible_tab_async.begin (update_visible_tab_cancellable);
+                return Source.REMOVE;
+            }, Priority.LOW);
+        }
+
+        async void update_visible_tab_async (Cancellable? cancellable) {
+            if (bindings != null) {
+                foreach (var binding in bindings) {
+                    binding.unbind ();
+                }
+            }
+            tab = (Tab)tabs.visible_child;
+            if (tab != null) {
+                go_back.sensitive = tab.can_go_back;
+                go_forward.sensitive = tab.can_go_forward;
+                is_loading = tab.is_loading;
+                reload.visible = !tab.is_loading;
+                stop_loading.visible = tab.is_loading;
+                urlbar.progress_fraction = tab.progress;
+                title = tab.display_title;
+                urlbar.secure = tab.secure;
+                statusbar.label = tab.link_uri;
+                urlbar.uri = tab.display_uri;
+                navigationbar.visible = !tab.pinned;
+                bindings.append (tab.bind_property ("can-go-back", go_back, "sensitive"));
+                bindings.append (tab.bind_property ("can-go-forward", go_forward, "sensitive"));
+                bindings.append (tab.bind_property ("is-loading", reload, "visible", BindingFlags.INVERT_BOOLEAN));
+                bindings.append (tab.bind_property ("is-loading", stop_loading, "visible"));
+                bindings.append (tab.bind_property ("progress", urlbar, "progress-fraction"));
+                bindings.append (tab.bind_property ("display-title", this, "title"));
+                bindings.append (tab.bind_property ("secure", urlbar, "secure"));
+                bindings.append (tab.bind_property ("link-uri", statusbar, "label"));
+                bindings.append (tab.bind_property ("display-uri", urlbar, "uri"));
+                bindings.append (tab.bind_property ("pinned", navigationbar, "visible", BindingFlags.INVERT_BOOLEAN));
+                if (!cancellable.is_cancelled ()) {
+                    tab.grab_focus ();
+                }
+            } else {
+                var previous_tab = tabs.get_children ().nth_data (0);
+                if (previous_tab == null)
+                    close ();
+                else {
+                    is_loading = tab.is_loading;
+                    tab = (Tab)previous_tab;
+                }
+            }
         }
 
         void update_decoration_layout () {
